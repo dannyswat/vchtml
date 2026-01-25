@@ -52,6 +52,38 @@ func Merge(baseHTML string, deltaA, deltaB *Delta) (string, *Delta, []Conflict, 
 	return patched, mergedDelta, nil, err
 }
 
+// MergeAll merges a list of deltas sequentially.
+func MergeAll(baseHTML string, deltas []*Delta) (string, *Delta, []Conflict, error) {
+	if len(deltas) == 0 {
+		return baseHTML, &Delta{BaseHash: hashString(baseHTML)}, nil, nil
+	}
+
+	merged := deltas[0]
+
+	// If there's only one delta, just apply it to verify and return
+	if len(deltas) == 1 {
+		patched, err := Patch(baseHTML, merged)
+		return patched, merged, nil, err
+	}
+
+	var patched string
+	var err error
+	var conflicts []Conflict
+
+	for i := 1; i < len(deltas); i++ {
+		// Merge the accumulated merged delta with the next delta
+		patched, merged, conflicts, err = Merge(baseHTML, merged, deltas[i])
+		if err != nil {
+			return "", nil, nil, err
+		}
+		if len(conflicts) > 0 {
+			return "", nil, conflicts, nil
+		}
+	}
+
+	return patched, merged, nil, nil
+}
+
 func detectConflicts(opsA, opsB []Operation) []Conflict {
 	var conflicts []Conflict
 	// We use string representation of Path for map keys
