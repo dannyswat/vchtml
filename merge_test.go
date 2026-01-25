@@ -41,6 +41,38 @@ func TestMerge(t *testing.T) {
 	}
 }
 
+func TestMergeAll(t *testing.T) {
+	baseHTML := `<div><p>Start</p><p>Line 1</p></div>`
+
+	// Delta 1: Change text to "First"
+	delta1, _ := Diff(baseHTML, `<div><p>Start</p><p>Line 2</p></div>`, "User1")
+
+	// Delta 2: Add attribute to div
+	delta2, _ := Diff(baseHTML, `<div><p>Starts</p><p>Line 1</p></div>`, "User2")
+
+	mergedHTML, _, conflicts, err := MergeAll(baseHTML, []*Delta{delta1, delta2})
+	if err != nil {
+		t.Fatalf("MergeAll failed: %v", err)
+	}
+	if len(conflicts) > 0 {
+		t.Fatalf("Unexpected conflicts: %v", conflicts)
+	}
+
+	// Expected: <div><p>Starts</p><p>Line 2</p></div>
+	wanted := `<div><p>Starts</p><p>Line 2</p></div>`
+
+	// Normalize (Parse/Render) to avoid string diff issues
+	wantDoc, _ := ParseHTML(wanted)
+	wantStr, _ := RenderNode(wantDoc)
+
+	gotDoc, _ := ParseHTML(mergedHTML)
+	gotStr, _ := RenderNode(gotDoc)
+
+	if gotStr != wantStr {
+		t.Errorf("MergeAll mismatch.\nWant: %s\nGot:  %s", wantStr, gotStr)
+	}
+}
+
 func TestConflict(t *testing.T) {
 	baseHTML := `<div>Text</div>`
 
