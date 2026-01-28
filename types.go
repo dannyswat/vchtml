@@ -11,7 +11,9 @@ const (
 	OpDeleteNode OpType = "DELETE_NODE" // Remove a node
 	OpMoveNode   OpType = "MOVE_NODE"   // Reparent or reorder a node
 	OpUpdateAttr OpType = "UPDATE_ATTR" // Change/Add/Remove an attribute
-	OpUpdateText OpType = "UPDATE_TEXT" // Change text content of a text node
+	OpUpdateText OpType = "UPDATE_TEXT" // Replace full text (Atomic)
+	OpInsertText OpType = "INSERT_TEXT" // Insert text at position
+	OpDeleteText OpType = "DELETE_TEXT" // Delete text at position
 )
 
 // Operation represents an atomic change to the HTML structure.
@@ -20,9 +22,9 @@ type Operation struct {
 	Path     NodePath `json:"path"`
 	Key      string   `json:"key,omitempty"`       // For Attributes (name of the attribute)
 	OldValue string   `json:"old_value,omitempty"` // Previous value (for verification/conflict check)
-	NewValue string   `json:"new_value,omitempty"` // New value/Content
+	NewValue string   `json:"new_value,omitempty"` // New value/Content. For InsertText: text to insert.
 	NodeData string   `json:"node_data,omitempty"` // For Insert: The HTML string of the node
-	Position int      `json:"position,omitempty"`  // For Insert/Move: The index in the parent's child list
+	Position int      `json:"position,omitempty"`  // For InsertNode/MoveNode: child index. For InsertText/DeleteText: char offset.
 }
 
 // Delta represents a set of changes applied to a base document.

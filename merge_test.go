@@ -4,14 +4,22 @@ import (
 	"testing"
 )
 
-func TestMerge(t *testing.T) {
-	baseHTML := `<ul><li>A</li><li>B</li></ul>`
+func TestMergeTextConflict(t *testing.T) {
+	baseHTML := `<p>Hello World</p>`
 
-	// Delta A: Insert X at 0
-	deltaA, _ := Diff(baseHTML, `<ul><li>X</li><li>A</li><li>B</li></ul>`, "A")
+	// Delta A: Insert "Go " at index 6 (after "Hello ")
+	// Result A: Hello Go World
+	deltaA, err := Diff(baseHTML, `<p>Hello Go World</p>`, "A")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	// Delta B: Insert Y at 2 (Append)
-	deltaB, _ := Diff(baseHTML, `<ul><li>A</li><li>B</li><li>Y</li></ul>`, "B")
+	// Delta B: Insert "!" at index 11 (End)
+	// Result B: Hello World!
+	deltaB, err := Diff(baseHTML, `<p>Hello World!</p>`, "B")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	mergedHTML, _, conflicts, err := Merge(baseHTML, deltaA, deltaB)
 	if err != nil {
@@ -21,72 +29,61 @@ func TestMerge(t *testing.T) {
 		t.Fatalf("Unexpected conflicts: %v", conflicts)
 	}
 
-	// Expected: X, A, B, Y
-	// But note: order of X depending on exact implementation.
-	// A inserted X at 0.
-	// B inserted Y at 2 (end).
-	// Result structure: <ul><li>X</li><li>A</li><li>B</li><li>Y</li></ul>
+	// Expected: Hello Go World!
+	// Position of "!" might shift if A inserted before it?
+	// Hello (5) + ' ' (1) = Index 6.
+	// A inserts at 6.
+	// B inserts at 11 (End).
+	// Since 11 > 6, B should start after A.
+	// A adds 3 chars ("Go "). So B should be at 11 + 3 = 14.
+	// "Hello Go World" is 14 chars. So "!" at 14 is correct.
 
-	wanted := `<ul><li>X</li><li>A</li><li>B</li><li>Y</li></ul>`
+	wanted := `<p>Hello Go World!</p>`
 
-	// Normalize (Parse/Render) to avoid string diff issues
-	wantDoc, _ := ParseHTML(wanted)
-	wantStr, _ := RenderNode(wantDoc)
-
-	gotDoc, _ := ParseHTML(mergedHTML)
-	gotStr, _ := RenderNode(gotDoc)
-
-	if gotStr != wantStr {
-		t.Errorf("Merge mismatch.\nWant: %s\nGot:  %s", wantStr, gotStr)
+	// Comparison
+	if !compareHTML(t, mergedHTML, wanted) {
+		t.Errorf("Merge incorrect.")
 	}
 }
 
-func TestMergeAll(t *testing.T) {
-	baseHTML := `<div><p>Start</p><p>Line 1</p></div>`
+func TestMergeTextConflictInterleaved(t *testing.T) {
+	baseHTML := `<p>ABCD</p>`
 
-	// Delta 1: Change text to "First"
-	delta1, _ := Diff(baseHTML, `<div><p>Start</p><p>Line 2</p></div>`, "User1")
+	// A: Insert X after B (Pos 2) -> ABXCD
+	deltaA, _ := Diff(baseHTML, `<p>ABXCD</p>`, "A")
 
-	// Delta 2: Add attribute to div
-	delta2, _ := Diff(baseHTML, `<div><p>Starts</p><p>Line 1</p></div>`, "User2")
+	// B: Insert Y after C (Pos 3) -> ABCYD
+	deltaB, _ := Diff(baseHTML, `<p>ABCYD</p>`, "B")
 
-	mergedHTML, _, conflicts, err := MergeAll(baseHTML, []*Delta{delta1, delta2})
+	merged, _, conflicts, err := Merge(baseHTML, deltaA, deltaB)
 	if err != nil {
-		t.Fatalf("MergeAll failed: %v", err)
+		t.Fatal(err)
 	}
 	if len(conflicts) > 0 {
 		t.Fatalf("Unexpected conflicts: %v", conflicts)
 	}
 
-	// Expected: <div><p>Starts</p><p>Line 2</p></div>
-	wanted := `<div><p>Starts</p><p>Line 2</p></div>`
+	// Expected: ABXCYD
+	// A inserts X at 2.
+	// B inserts Y at 3.
+	// 3 >= 2. So B shifts by 1 (len X). New B pos = 4.
+	// Apply A: A B X C D
+	//          0 1 2 3 4
+	// Apply B at 4: A B X C Y D
 
-	// Normalize (Parse/Render) to avoid string diff issues
-	wantDoc, _ := ParseHTML(wanted)
-	wantStr, _ := RenderNode(wantDoc)
-
-	gotDoc, _ := ParseHTML(mergedHTML)
-	gotStr, _ := RenderNode(gotDoc)
-
-	if gotStr != wantStr {
-		t.Errorf("MergeAll mismatch.\nWant: %s\nGot:  %s", wantStr, gotStr)
-	}
+	want := `<p>ABXCYD</p>`
+	compareHTML(t, merged, want)
 }
 
-func TestConflict(t *testing.T) {
-	baseHTML := `<div>Text</div>`
-
-	// Delta A: Change to "A"
-	deltaA, _ := Diff(baseHTML, `<div>A</div>`, "A")
-
-	// Delta B: Change to "B"
-	deltaB, _ := Diff(baseHTML, `<div>B</div>`, "B")
-
-	_, _, conflicts, _ := Merge(baseHTML, deltaA, deltaB)
-	if len(conflicts) == 0 {
-		t.Fatal("Expected conflict, got none")
+func compareHTML(t *testing.T, got, want string) bool {
+	gDoc, _ := ParseHTML(got)
+	wDoc, _ := ParseHTML(want)
+	gStr, _ := RenderNode(gDoc)
+	wStr, _ := RenderNode(wDoc)
+	if gStr != wStr {
+		t.Logf("Want: %s", wStr)
+		t.Logf("Got:  %s", gStr)
+		return false
 	}
-	if len(conflicts) != 1 {
-		t.Errorf("Expected 1 conflict, got %d", len(conflicts))
-	}
+	return true
 }

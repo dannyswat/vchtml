@@ -35,7 +35,9 @@ const (
     OpDeleteNode     OpType = "DELETE_NODE"     // Remove a node
     OpMoveNode       OpType = "MOVE_NODE"       // Reparent or reorder a node
     OpUpdateAttr     OpType = "UPDATE_ATTR"     // Change/Add/Remove an attribute
-    OpUpdateText     OpType = "UPDATE_TEXT"     // Change text content of a text node
+    OpUpdateText     OpType = "UPDATE_TEXT"     // Full replacement of text node content (Atomic)
+    OpInsertText     OpType = "INSERT_TEXT"     // Insert string into a text node at an offset
+    OpDeleteText     OpType = "DELETE_TEXT"     // Remove string from a text node at an offset
 )
 
 type Operation struct {
@@ -43,9 +45,9 @@ type Operation struct {
     Path      NodePath    // Location where the operation applies
     Key       string      // For Attributes (name of the attribute)
     OldValue  string      // Previous value (for verification/conflict check)
-    NewValue  string      // New value/Content
-    NodeData  string      // For Insert: The HTML string of the node
-    Position  int         // For Insert/Move: The index in the parent's child list
+    NewValue  string      // New value/Content (For InsertText: text to insert)
+    NodeData  string      // For InsertNode: The HTML string of the node
+    Position  int         // For InsertNode/MoveNode: The child index. For InsertText/DeleteText: The character offset.
 }
 ```
 
@@ -70,6 +72,7 @@ func Diff(oldHTML, newHTML string) (*Delta, error)
 ```
 *   **Algorithm**: Tree-edit distance algorithm (e.g., Zhang-Shasha or a heuristic-based approach optimized for HTML).
 *   **Heuristics**: Match nodes by ID if available, otherwise use tag name + class/content similarity.
+*   **Text Diffing**: For modified text nodes, employ a linear diff algorithm (like Myers or diff-match-patch) to produce granular `OpInsertText` and `OpDeleteText` operations capable of character-level merging, rather than atomic `OpUpdateText`.
 
 #### 2.2. Patch (Apply)
 Applies a Delta to a base HTML string.
@@ -109,9 +112,12 @@ Conflicts arise when `deltaA` and `deltaB` modify the same or dependent parts of
 
 **Scenario 2: Text Conflict**
 *   Base: `<p>Hello World</p>`
-*   Delta A: `<p>Hello Go</p>`
-*   Delta B: `<p>Hello Future</p>`
-*   **Result**: Conflict.
+*   Delta A: Inserts "Go " at index 6 (`OpInsertText`, Pos: 6, New: "Go ") -> `<p>Hello Go World</p>`
+*   Delta B: Inserts "!" at index 11 (`OpInsertText`, Pos: 11, New: "!") -> `<p>Hello World!</p>`
+*   **Result**: Merged successfully.
+    *   Operational Transformation (OT) or Index shifting allows applying both.
+    *   Result: `<p>Hello Go World!</p>`
+    *   True conflicts (same position, different text) may still require resolution strategies.
 
 **Scenario 3: Structural Conflict (Delete/Edit)**
 *   Base: `<ul><li>Item 1</li></ul>`

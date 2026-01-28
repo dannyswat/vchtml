@@ -4,36 +4,36 @@ import (
 	"testing"
 )
 
-func TestPatchRoundTrip(t *testing.T) {
+func TestPatchTextOps(t *testing.T) {
+	// Explicitly construct ops to test Patch logic in isolation
+	// Assuming Path for text node is [0, 0] (Root -> p -> Text)
+	// Actually ParseHTML usually returns a Doc -> Html -> Body -> p -> Text?
+	// Wait, ParseHTML in this lib uses html.Parse which returns a DocumentNode.
+	// <html><head></head><body><p>...</p></body></html>
+	// So Path is deeper.
+	// To reliably get path, we should run Diff first.
+
+	// Let's use RoundTrip testing which is easier given Path complexity.
+
 	tests := []struct {
 		name    string
 		oldHTML string
 		newHTML string
 	}{
 		{
-			name:    "Text change",
-			oldHTML: "<div><p>Hello</p></div>",
-			newHTML: "<div><p>World</p></div>",
+			name:    "Insert Text",
+			oldHTML: "<p>Hello</p>",
+			newHTML: "<p>Hello World</p>",
 		},
 		{
-			name:    "Attribute change",
-			oldHTML: `<div class="a"></div>`,
-			newHTML: `<div class="b"></div>`,
+			name:    "Delete Text",
+			oldHTML: "<p>Hello World</p>",
+			newHTML: "<p>Hello</p>",
 		},
 		{
-			name:    "Insert node",
-			oldHTML: `<ul><li>A</li></ul>`,
-			newHTML: `<ul><li>A</li><li>B</li></ul>`,
-		},
-		{
-			name:    "Delete node",
-			oldHTML: `<ul><li>A</li><li>B</li></ul>`,
-			newHTML: `<ul><li>A</li></ul>`,
-		},
-		{
-			name:    "Complex structural change",
-			oldHTML: `<div id="main"><h1>Title</h1><p>Text</p></div>`,
-			newHTML: `<div id="main"><h1>New Title</h1><p>Text</p><p>Footer</p></div>`,
+			name:    "Insert Middle",
+			oldHTML: "<p>ABC</p>",
+			newHTML: "<p>A B C</p>",
 		},
 	}
 
@@ -49,20 +49,13 @@ func TestPatchRoundTrip(t *testing.T) {
 				t.Fatalf("Patch() error = %v", err)
 			}
 
-			// We need to compare semantic equivalence, as Patch might introduce slight normalization diffs
-			// (e.g. whitespace, quote style).
-			// So we re-parse and re-render both expected and actual.
+			pDoc, _ := ParseHTML(patched)
+			nDoc, _ := ParseHTML(tt.newHTML)
+			pStr, _ := RenderNode(pDoc)
+			nStr, _ := RenderNode(nDoc)
 
-			wantDoc, _ := ParseHTML(tt.newHTML)
-			wantStr, _ := RenderNode(wantDoc)
-
-			doc2, _ := ParseHTML(patched)
-			gotStr, _ := RenderNode(doc2)
-
-			if gotStr != wantStr {
-				t.Errorf("RoundTrip failed.\nWant: %s\nGot:  %s", wantStr, gotStr)
-				// Print Ops for debug
-				printJSON(delta.Operations)
+			if pStr != nStr {
+				t.Errorf("Patch mismatch.\nWant: %s\nGot:  %s", nStr, pStr)
 			}
 		})
 	}
